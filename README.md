@@ -164,7 +164,7 @@ For report tables and charts, keep runs from different environments in separate 
 
 The Linux/Docker runner accepts these environment variables:
 
-- `REPEATS` - default `3`
+- `REPEATS` - default `5`
 - `CPU_LIMIT` - default `120000`
 - `MATRIX_N` - default `512`
 - `IO_MB` - default `256`

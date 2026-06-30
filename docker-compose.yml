@@ -6,6 +6,8 @@ services:
     container_name: c_benchmark_suite
     working_dir: /app
     command: ["bash", "-c", "chmod +x run_all_linux.sh && ./run_all_linux.sh docker_ubuntu"]
+    environment:
+      REPEATS: 5
     volumes:
       - ./results:/app/results
     stdin_open: true

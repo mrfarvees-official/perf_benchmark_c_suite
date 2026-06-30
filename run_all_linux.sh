@@ -8,7 +8,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$ROOT_DIR" || exit 1
 
 ENV_NAME="${1:-linux}"
-REPEATS="${REPEATS:-3}"
+REPEATS="${REPEATS:-5}"
 CPU_LIMIT="${CPU_LIMIT:-120000}"
 MATRIX_N="${MATRIX_N:-512}"
 IO_MB="${IO_MB:-256}"

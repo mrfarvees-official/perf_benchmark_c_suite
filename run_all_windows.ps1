@@ -4,7 +4,7 @@
 
 param(
     [string]$EnvironmentName = "native_windows",
-    [int]$Repeats = 3,
+    [int]$Repeats = 5,
     [int]$CpuLimit = 120000,
     [int]$MatrixN = 512,
     [int]$IoMB = 256,
