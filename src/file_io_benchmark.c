@@ -1,4 +1,5 @@
 #include "common.h"
+#include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -31,8 +32,8 @@ int main(int argc, char **argv) {
     double read_seconds = now_seconds() - start;
 
     printf("workload,version,seconds,throughput_MBps,checksum\n");
-    printf("file_io,write_buffered,%.6f,%.6f,%llu\n", write_seconds, (double)mb / write_seconds, (unsigned long long)checksum);
-    printf("file_io,read_buffered,%.6f,%.6f,%llu\n", read_seconds, (double)mb / read_seconds, (unsigned long long)checksum);
+    printf("file_io,write_buffered,%.6f,%.6f,%" PRIu64 "\n", write_seconds, (double)mb / write_seconds, checksum);
+    printf("file_io,read_buffered,%.6f,%.6f,%" PRIu64 "\n", read_seconds, (double)mb / read_seconds, checksum);
     free(buffer);
     return 0;
 }
