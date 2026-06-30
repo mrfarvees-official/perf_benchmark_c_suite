@@ -126,6 +126,7 @@ Examples:
 Inside each run folder you will find:
 
 - `results.csv` - combined benchmark output
+- `averages.csv` - grouped averages across all repeats for each configuration
 - `run.log` - timestamped runner log
 - `system_summary.txt` - environment summary
 - `lscpu.txt`, `free_h.txt`, `df_h.txt`, `vmstat_1s_5samples.txt`, `top_snapshot.txt` - Linux system snapshots

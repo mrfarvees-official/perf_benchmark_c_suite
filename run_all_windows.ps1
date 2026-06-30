@@ -104,9 +104,63 @@ function Run-One($Label, $Exe, $Arg, $Opt, $Threads, $Repeat) {
     $lines = Get-Content $Raw
     foreach ($line in $lines | Select-Object -Skip 1) {
         if ($line.Trim().Length -gt 0) {
-            Add-Content -Path $CsvPath -Value "$EnvironmentName,$Opt,$Threads,$Repeat,$line"
+            $fields = $line.Split(",")
+            if ($fields.Count -eq 4) {
+                Add-Content -Path $CsvPath -Value "$EnvironmentName,$Opt,$Threads,$Repeat,$line,"
+            } else {
+                Add-Content -Path $CsvPath -Value "$EnvironmentName,$Opt,$Threads,$Repeat,$line"
+            }
         }
     }
+}
+
+function Format-F6([double]$Value) {
+    return $Value.ToString("F6", [System.Globalization.CultureInfo]::InvariantCulture)
+}
+
+function Generate-Averages {
+    $rows = Import-Csv -Path $CsvPath
+    $groups = @{}
+
+    foreach ($row in $rows) {
+        $key = "$($row.environment)|$($row.opt_level)|$($row.threads)|$($row.workload)|$($row.version)"
+        if (-not $groups.ContainsKey($key)) {
+            $groups[$key] = [ordered]@{
+                environment = $row.environment
+                opt_level = $row.opt_level
+                threads = $row.threads
+                workload = $row.workload
+                version = $row.version
+                samples = 0
+                seconds_sum = 0.0
+                metric_sum = 0.0
+                extra_sum = 0.0
+                extra_samples = 0
+            }
+        }
+
+        $group = $groups[$key]
+        $group.samples++
+        $group.seconds_sum += [double]$row.seconds
+        $group.metric_sum += [double]$row.metric_name_or_value
+        if ($null -ne $row.extra -and $row.extra.Trim().Length -gt 0) {
+            $group.extra_sum += [double]$row.extra
+            $group.extra_samples++
+        }
+    }
+
+    $AveragePath = Join-Path $OutDir "averages.csv"
+    "environment,opt_level,threads,workload,version,samples,avg_seconds,avg_metric_value,avg_extra_value" | Set-Content -Path $AveragePath -Encoding ascii
+
+    $groups.Values |
+        Sort-Object environment, opt_level, threads, workload, version |
+        ForEach-Object {
+            $avgSeconds = Format-F6 ($_.seconds_sum / $_.samples)
+            $avgMetric = Format-F6 ($_.metric_sum / $_.samples)
+            $avgExtra = if ($_.extra_samples -gt 0) { Format-F6 ($_.extra_sum / $_.extra_samples) } else { "" }
+            $line = "{0},{1},{2},{3},{4},{5},{6},{7},{8}" -f $_.environment, $_.opt_level, $_.threads, $_.workload, $_.version, $_.samples, $avgSeconds, $avgMetric, $avgExtra
+            Add-Content -Path $AveragePath -Value $line -Encoding ascii
+        }
 }
 
 function Run-All {
@@ -164,7 +218,9 @@ Build-One "-O1" "O1"
 Build-One "-O2" "O2"
 Build-One "-O3" "O3"
 Run-All
+Generate-Averages
 
 Log "Finished. Results saved in: $OutDir"
 Write-Host "Results folder: $OutDir"
 Write-Host "Main CSV: $CsvPath"
+Write-Host "Average CSV: $(Join-Path $OutDir 'averages.csv')"

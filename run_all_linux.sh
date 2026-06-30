@@ -100,9 +100,47 @@ run_cmd() {
   # line after the per-run header and prefix run metadata.
   awk -F, -v env="$ENV_NAME" -v opt="$opt" -v th="$threads" -v rep="$repeat" '
     NR > 1 && NF {
-      print env "," opt "," th "," rep "," $0
+      if (NF == 4) {
+        print env "," opt "," th "," rep "," $0 ","
+      } else {
+        print env "," opt "," th "," rep "," $0
+      }
     }
   ' "$raw" >> "$OUT_DIR/results.csv"
+}
+
+generate_averages() {
+  awk -F, '
+    NR == 1 { next }
+    {
+      key = $1 SUBSEP $2 SUBSEP $3 SUBSEP $5 SUBSEP $6
+      if (!(key in seen)) {
+        order[++count] = key
+      }
+      seen[key]++
+      sec_sum[key] += $7 + 0
+      metric_sum[key] += $8 + 0
+      if (NF >= 9 && $9 != "") {
+        extra_sum[key] += $9 + 0
+        extra_seen[key]++
+      }
+    }
+    END {
+      print "environment,opt_level,threads,workload,version,samples,avg_seconds,avg_metric_value,avg_extra_value"
+      for (i = 1; i <= count; i++) {
+        key = order[i]
+        split(key, f, SUBSEP)
+        avg_seconds = sec_sum[key] / seen[key]
+        avg_metric = metric_sum[key] / seen[key]
+        avg_extra = (extra_seen[key] ? extra_sum[key] / extra_seen[key] : "")
+        if (avg_extra == "") {
+          printf "%s,%s,%s,%s,%s,%d,%.6f,%.6f,\n", f[1], f[2], f[3], f[4], f[5], seen[key], avg_seconds, avg_metric
+        } else {
+          printf "%s,%s,%s,%s,%s,%d,%.6f,%.6f,%.6f\n", f[1], f[2], f[3], f[4], f[5], seen[key], avg_seconds, avg_metric, avg_extra
+        }
+      }
+    }
+  ' "$OUT_DIR/results.csv" > "$OUT_DIR/averages.csv"
 }
 
 run_all() {
@@ -177,8 +215,10 @@ build_one -O1 O1 || exit 1
 build_one -O2 O2 || exit 1
 build_one -O3 O3 || exit 1
 run_all
+generate_averages
 profile_examples
 
 log "Finished. Results saved in: $OUT_DIR"
 echo "Results folder: $OUT_DIR"
 echo "Main CSV: $OUT_DIR/results.csv"
+echo "Average CSV: $OUT_DIR/averages.csv"
