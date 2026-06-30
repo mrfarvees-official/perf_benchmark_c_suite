@@ -95,10 +95,13 @@ run_cmd() {
     "$exe" "$arg" > "$raw" 2> "$timing"
   fi
 
-  # Convert program CSV output to one combined CSV. Handles 1-row and 2-row file I/O output.
-  awk -v env="$ENV_NAME" -v opt="$opt" -v th="$threads" -v rep="$repeat" -v label="$label" '
-    NR==1 { next }
-    NF>=4 { print env "," opt "," th "," rep "," $0 }
+  # Convert program CSV output to one combined CSV.
+  # The benchmark programs already emit comma-separated rows, so keep every data
+  # line after the per-run header and prefix run metadata.
+  awk -F, -v env="$ENV_NAME" -v opt="$opt" -v th="$threads" -v rep="$repeat" '
+    NR > 1 && NF {
+      print env "," opt "," th "," rep "," $0
+    }
   ' "$raw" >> "$OUT_DIR/results.csv"
 }
 
