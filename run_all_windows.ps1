@@ -128,6 +128,10 @@ function Run-One($Label, $Exe, $Arg, $Opt, $Threads, $Repeat) {
     "io_read=$ioRead" | Add-Content -Encoding ascii $TimeFile
     "io_write=$ioWrite" | Add-Content -Encoding ascii $TimeFile
 
+    if ((Test-Path $Err) -and ((Get-Item $Err).Length -eq 0)) {
+        Remove-Item -Force $Err
+    }
+
     $lines = Get-Content $Raw
     foreach ($line in $lines | Select-Object -Skip 1) {
         if ($line.Trim().Length -gt 0) {
