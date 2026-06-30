@@ -54,6 +54,29 @@ collect_system_info() {
     echo "Kernel: $(uname -a 2>/dev/null || true)"
     echo "Container detection:"
     [ -f /.dockerenv ] && echo "  /.dockerenv exists" || echo "  /.dockerenv not found"
+    echo
+    echo "CPU information:"
+    lscpu 2>/dev/null || true
+    echo
+    echo "Memory information:"
+    free -h 2>/dev/null || true
+    echo
+    echo "Disk usage:"
+    df -h 2>/dev/null || true
+    echo
+    echo "Block devices:"
+    lsblk 2>/dev/null || true
+  } > "$OUT_DIR/systeminfo.txt"
+
+  {
+    echo "Environment name: $ENV_NAME"
+    echo "Date: $(date 2>/dev/null || true)"
+    echo "PWD: $ROOT_DIR"
+    echo "Compiler: $($CC --version | head -n 1)"
+    echo "OpenMP flag detected: ${OPENMP_FLAG:-not available}"
+    echo "Kernel: $(uname -a 2>/dev/null || true)"
+    echo "Container detection:"
+    [ -f /.dockerenv ] && echo "  /.dockerenv exists" || echo "  /.dockerenv not found"
   } > "$OUT_DIR/system_summary.txt"
 
   lscpu > "$OUT_DIR/lscpu.txt" 2>&1 || true

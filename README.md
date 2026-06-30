@@ -128,7 +128,8 @@ Inside each run folder you will find:
 - `results.csv` - combined benchmark output
 - `averages.csv` - grouped averages across all repeats for each configuration, including the resource columns
 - `run.log` - timestamped runner log
-- `system_summary.txt` - environment summary
+- `system_summary.txt` - short environment summary
+- `systeminfo.txt` - consolidated Linux system info, similar in purpose to Windows `systeminfo.txt`
 - `lscpu.txt`, `free_h.txt`, `df_h.txt`, `vmstat_1s_5samples.txt`, `top_snapshot.txt` - Linux system snapshots
 - `systeminfo.txt`, `cpu.txt`, `memory.txt`, `disk.txt` - Windows system snapshots
 - `raw_*.txt` - raw benchmark stdout for each run
