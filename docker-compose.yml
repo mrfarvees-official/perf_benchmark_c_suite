@@ -1,0 +1,12 @@
+services:
+  c-benchmark-suite:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: c_benchmark_suite
+    working_dir: /app
+    command: ["bash", "-c", "chmod +x run_all_linux.sh && ./run_all_linux.sh docker_ubuntu"]
+    volumes:
+      - ./results:/app/results
+    stdin_open: true
+    tty: true
