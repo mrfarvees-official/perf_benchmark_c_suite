@@ -85,30 +85,57 @@ function Build-One($Opt, $Suffix) {
 }
 
 $CsvPath = Join-Path $OutDir "results.csv"
-"environment,opt_level,threads,repeat,workload,version,seconds,metric_name_or_value,extra" | Set-Content -Path $CsvPath -Encoding ascii
+"environment,opt_level,threads,repeat,workload,version,seconds,metric_name_or_value,extra,resource_cpu_seconds_total,resource_cpu_percent,resource_peak_rss_kb,resource_io_read,resource_io_write" | Set-Content -Path $CsvPath -Encoding ascii
 
 function Run-One($Label, $Exe, $Arg, $Opt, $Threads, $Repeat) {
     Log "Running $Label opt=$Opt threads=$Threads repeat=$Repeat"
     $env:OMP_NUM_THREADS = [string]$Threads
     $Raw = Join-Path $OutDir "raw_${Label}_${Opt}_t${Threads}_r${Repeat}.txt"
+    $Err = Join-Path $OutDir "err_${Label}_${Opt}_t${Threads}_r${Repeat}.txt"
     $TimeFile = Join-Path $OutDir "time_${Label}_${Opt}_t${Threads}_r${Repeat}.txt"
 
     $sw = [System.Diagnostics.Stopwatch]::StartNew()
-    $output = & $Exe $Arg 2>&1
-    $exitCode = $LASTEXITCODE
+    $proc = Start-Process -FilePath $Exe -ArgumentList $Arg -PassThru -NoNewWindow -RedirectStandardOutput $Raw -RedirectStandardError $Err
+    $peakWorkingSet = 0
+    $peakIoRead = 0
+    $peakIoWrite = 0
+    $lastCpuSeconds = 0.0
+
+    while ($true) {
+        try {
+            $p = Get-Process -Id $proc.Id -ErrorAction Stop
+            if ($p.PeakWorkingSet64 -gt $peakWorkingSet) { $peakWorkingSet = $p.PeakWorkingSet64 }
+            if ($p.PSObject.Properties.Name -contains "IOReadBytes" -and $p.IOReadBytes -gt $peakIoRead) { $peakIoRead = [int64]$p.IOReadBytes }
+            if ($p.PSObject.Properties.Name -contains "IOWriteBytes" -and $p.IOWriteBytes -gt $peakIoWrite) { $peakIoWrite = [int64]$p.IOWriteBytes }
+            if ($p.CPU -gt $lastCpuSeconds) { $lastCpuSeconds = [double]$p.CPU }
+        } catch { break }
+        Start-Sleep -Milliseconds 50
+    }
+
     $sw.Stop()
-    $output | Out-File -Encoding ascii $Raw
+    $exitCode = $proc.ExitCode
+    $cpuSeconds = $lastCpuSeconds
+    $peakRssKb = if ($peakWorkingSet -gt 0) { [math]::Round($peakWorkingSet / 1KB, 0) } else { "" }
+    $ioRead = if ($peakIoRead -gt 0) { [double]$peakIoRead } else { "" }
+    $ioWrite = if ($peakIoWrite -gt 0) { [double]$peakIoWrite } else { "" }
+    $cpuPercent = if ($sw.Elapsed.TotalSeconds -gt 0) { [double](($cpuSeconds / $sw.Elapsed.TotalSeconds) * 100.0) } else { "" }
+
     "PowerShell_elapsed_seconds=$($sw.Elapsed.TotalSeconds)" | Set-Content -Encoding ascii $TimeFile
     "exit_code=$exitCode" | Add-Content -Encoding ascii $TimeFile
+    "cpu_seconds_total=$cpuSeconds" | Add-Content -Encoding ascii $TimeFile
+    "cpu_percent=$cpuPercent" | Add-Content -Encoding ascii $TimeFile
+    "peak_rss_kb=$peakRssKb" | Add-Content -Encoding ascii $TimeFile
+    "io_read=$ioRead" | Add-Content -Encoding ascii $TimeFile
+    "io_write=$ioWrite" | Add-Content -Encoding ascii $TimeFile
 
     $lines = Get-Content $Raw
     foreach ($line in $lines | Select-Object -Skip 1) {
         if ($line.Trim().Length -gt 0) {
             $fields = $line.Split(",")
             if ($fields.Count -eq 4) {
-                Add-Content -Path $CsvPath -Value "$EnvironmentName,$Opt,$Threads,$Repeat,$line,"
+                Add-Content -Path $CsvPath -Value "$EnvironmentName,$Opt,$Threads,$Repeat,$line,,${cpuSeconds},${cpuPercent},${peakRssKb},${ioRead},${ioWrite}"
             } else {
-                Add-Content -Path $CsvPath -Value "$EnvironmentName,$Opt,$Threads,$Repeat,$line"
+                Add-Content -Path $CsvPath -Value "$EnvironmentName,$Opt,$Threads,$Repeat,$line,${cpuSeconds},${cpuPercent},${peakRssKb},${ioRead},${ioWrite}"
             }
         }
     }
@@ -136,6 +163,16 @@ function Generate-Averages {
                 metric_sum = 0.0
                 extra_sum = 0.0
                 extra_samples = 0
+                cpu_seconds_sum = 0.0
+                cpu_seconds_samples = 0
+                cpu_percent_sum = 0.0
+                cpu_percent_samples = 0
+                peak_rss_sum = 0.0
+                peak_rss_samples = 0
+                io_read_sum = 0.0
+                io_read_samples = 0
+                io_write_sum = 0.0
+                io_write_samples = 0
             }
         }
 
@@ -147,10 +184,30 @@ function Generate-Averages {
             $group.extra_sum += [double]$row.extra
             $group.extra_samples++
         }
+        if ($null -ne $row.resource_cpu_seconds_total -and $row.resource_cpu_seconds_total.Trim().Length -gt 0) {
+            $group.cpu_seconds_sum += [double]$row.resource_cpu_seconds_total
+            $group.cpu_seconds_samples++
+        }
+        if ($null -ne $row.resource_cpu_percent -and $row.resource_cpu_percent.Trim().Length -gt 0) {
+            $group.cpu_percent_sum += [double]$row.resource_cpu_percent
+            $group.cpu_percent_samples++
+        }
+        if ($null -ne $row.resource_peak_rss_kb -and $row.resource_peak_rss_kb.Trim().Length -gt 0) {
+            $group.peak_rss_sum += [double]$row.resource_peak_rss_kb
+            $group.peak_rss_samples++
+        }
+        if ($null -ne $row.resource_io_read -and $row.resource_io_read.Trim().Length -gt 0) {
+            $group.io_read_sum += [double]$row.resource_io_read
+            $group.io_read_samples++
+        }
+        if ($null -ne $row.resource_io_write -and $row.resource_io_write.Trim().Length -gt 0) {
+            $group.io_write_sum += [double]$row.resource_io_write
+            $group.io_write_samples++
+        }
     }
 
     $AveragePath = Join-Path $OutDir "averages.csv"
-    "environment,opt_level,threads,workload,version,samples,avg_seconds,avg_metric_value,avg_extra_value" | Set-Content -Path $AveragePath -Encoding ascii
+    "environment,opt_level,threads,workload,version,samples,avg_seconds,avg_metric_value,avg_extra_value,avg_resource_cpu_seconds_total,avg_resource_cpu_percent,avg_resource_peak_rss_kb,avg_resource_io_read,avg_resource_io_write" | Set-Content -Path $AveragePath -Encoding ascii
 
     $groups.Values |
         Sort-Object environment, opt_level, threads, workload, version |
@@ -158,7 +215,12 @@ function Generate-Averages {
             $avgSeconds = Format-F6 ($_.seconds_sum / $_.samples)
             $avgMetric = Format-F6 ($_.metric_sum / $_.samples)
             $avgExtra = if ($_.extra_samples -gt 0) { Format-F6 ($_.extra_sum / $_.extra_samples) } else { "" }
-            $line = "{0},{1},{2},{3},{4},{5},{6},{7},{8}" -f $_.environment, $_.opt_level, $_.threads, $_.workload, $_.version, $_.samples, $avgSeconds, $avgMetric, $avgExtra
+            $avgCpuSeconds = if ($_.cpu_seconds_samples -gt 0) { Format-F6 ($_.cpu_seconds_sum / $_.cpu_seconds_samples) } else { "" }
+            $avgCpuPercent = if ($_.cpu_percent_samples -gt 0) { Format-F6 ($_.cpu_percent_sum / $_.cpu_percent_samples) } else { "" }
+            $avgPeakRss = if ($_.peak_rss_samples -gt 0) { Format-F6 ($_.peak_rss_sum / $_.peak_rss_samples) } else { "" }
+            $avgIoRead = if ($_.io_read_samples -gt 0) { Format-F6 ($_.io_read_sum / $_.io_read_samples) } else { "" }
+            $avgIoWrite = if ($_.io_write_samples -gt 0) { Format-F6 ($_.io_write_sum / $_.io_write_samples) } else { "" }
+            $line = "{0},{1},{2},{3},{4},{5},{6},{7},{8},{9},{10},{11},{12},{13}" -f $_.environment, $_.opt_level, $_.threads, $_.workload, $_.version, $_.samples, $avgSeconds, $avgMetric, $avgExtra, $avgCpuSeconds, $avgCpuPercent, $avgPeakRss, $avgIoRead, $avgIoWrite
             Add-Content -Path $AveragePath -Value $line -Encoding ascii
         }
 }

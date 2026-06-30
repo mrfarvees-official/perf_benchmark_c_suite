@@ -95,15 +95,25 @@ run_cmd() {
     "$exe" "$arg" > "$raw" 2> "$timing"
   fi
 
+  time_user_seconds="$(awk -F': *' '/^[[:space:]]*User time \(seconds\):/ {print $2; exit}' "$timing" 2>/dev/null || true)"
+  time_system_seconds="$(awk -F': *' '/^[[:space:]]*System time \(seconds\):/ {print $2; exit}' "$timing" 2>/dev/null || true)"
+  time_cpu_percent="$(awk -F': *' '/^[[:space:]]*Percent of CPU this job got:/ {gsub(/%/, "", $2); print $2; exit}' "$timing" 2>/dev/null || true)"
+  time_peak_rss_kb="$(awk -F': *' '/^[[:space:]]*Maximum resident set size \(kbytes\):/ {print $2; exit}' "$timing" 2>/dev/null || true)"
+  time_io_read="$(awk -F': *' '/^[[:space:]]*File system inputs:/ {print $2; exit}' "$timing" 2>/dev/null || true)"
+  time_io_write="$(awk -F': *' '/^[[:space:]]*File system outputs:/ {print $2; exit}' "$timing" 2>/dev/null || true)"
+  time_cpu_seconds_total="$(awk -v u="$time_user_seconds" -v s="$time_system_seconds" 'BEGIN { if (u == "" && s == "") { print "" } else { print (u + 0) + (s + 0) } }')"
+
   # Convert program CSV output to one combined CSV.
   # The benchmark programs already emit comma-separated rows, so keep every data
   # line after the per-run header and prefix run metadata.
-  awk -F, -v env="$ENV_NAME" -v opt="$opt" -v th="$threads" -v rep="$repeat" '
+  awk -F, -v env="$ENV_NAME" -v opt="$opt" -v th="$threads" -v rep="$repeat" \
+      -v cpu_total="$time_cpu_seconds_total" -v cpu_pct="$time_cpu_percent" \
+      -v peak_rss="$time_peak_rss_kb" -v io_read="$time_io_read" -v io_write="$time_io_write" '
     NR > 1 && NF {
       if (NF == 4) {
-        print env "," opt "," th "," rep "," $0 ","
+        print env "," opt "," th "," rep "," $0 ",," cpu_total "," cpu_pct "," peak_rss "," io_read "," io_write
       } else {
-        print env "," opt "," th "," rep "," $0
+        print env "," opt "," th "," rep "," $0 "," cpu_total "," cpu_pct "," peak_rss "," io_read "," io_write
       }
     }
   ' "$raw" >> "$OUT_DIR/results.csv"
@@ -124,27 +134,39 @@ generate_averages() {
         extra_sum[key] += $9 + 0
         extra_seen[key]++
       }
+      if (NF >= 10 && $10 != "") { cpu_total_sum[key] += $10 + 0; cpu_total_seen[key]++ }
+      if (NF >= 11 && $11 != "") { cpu_pct_sum[key] += $11 + 0; cpu_pct_seen[key]++ }
+      if (NF >= 12 && $12 != "") { peak_rss_sum[key] += $12 + 0; peak_rss_seen[key]++ }
+      if (NF >= 13 && $13 != "") { io_read_sum[key] += $13 + 0; io_read_seen[key]++ }
+      if (NF >= 14 && $14 != "") { io_write_sum[key] += $14 + 0; io_write_seen[key]++ }
     }
     END {
-      print "environment,opt_level,threads,workload,version,samples,avg_seconds,avg_metric_value,avg_extra_value"
+      print "environment,opt_level,threads,workload,version,samples,avg_seconds,avg_metric_value,avg_extra_value,avg_resource_cpu_seconds_total,avg_resource_cpu_percent,avg_resource_peak_rss_kb,avg_resource_io_read,avg_resource_io_write"
       for (i = 1; i <= count; i++) {
         key = order[i]
         split(key, f, SUBSEP)
         avg_seconds = sec_sum[key] / seen[key]
         avg_metric = metric_sum[key] / seen[key]
         avg_extra = (extra_seen[key] ? extra_sum[key] / extra_seen[key] : "")
-        if (avg_extra == "") {
-          printf "%s,%s,%s,%s,%s,%d,%.6f,%.6f,\n", f[1], f[2], f[3], f[4], f[5], seen[key], avg_seconds, avg_metric
-        } else {
-          printf "%s,%s,%s,%s,%s,%d,%.6f,%.6f,%.6f\n", f[1], f[2], f[3], f[4], f[5], seen[key], avg_seconds, avg_metric, avg_extra
-        }
+        avg_cpu_total = (cpu_total_seen[key] ? cpu_total_sum[key] / cpu_total_seen[key] : "")
+        avg_cpu_pct = (cpu_pct_seen[key] ? cpu_pct_sum[key] / cpu_pct_seen[key] : "")
+        avg_peak_rss = (peak_rss_seen[key] ? peak_rss_sum[key] / peak_rss_seen[key] : "")
+        avg_io_read = (io_read_seen[key] ? io_read_sum[key] / io_read_seen[key] : "")
+        avg_io_write = (io_write_seen[key] ? io_write_sum[key] / io_write_seen[key] : "")
+        printf "%s,%s,%s,%s,%s,%d,%.6f,%.6f,", f[1], f[2], f[3], f[4], f[5], seen[key], avg_seconds, avg_metric
+        if (avg_extra == "") { printf "," } else { printf "%.6f,", avg_extra }
+        if (avg_cpu_total == "") { printf "," } else { printf "%.6f,", avg_cpu_total }
+        if (avg_cpu_pct == "") { printf "," } else { printf "%.6f,", avg_cpu_pct }
+        if (avg_peak_rss == "") { printf "," } else { printf "%.6f,", avg_peak_rss }
+        if (avg_io_read == "") { printf "," } else { printf "%.6f,", avg_io_read }
+        if (avg_io_write == "") { printf "\n" } else { printf "%.6f\n", avg_io_write }
       }
     }
   ' "$OUT_DIR/results.csv" > "$OUT_DIR/averages.csv"
 }
 
 run_all() {
-  echo "environment,opt_level,threads,repeat,workload,version,seconds,metric_name_or_value,extra" > "$OUT_DIR/results.csv"
+  echo "environment,opt_level,threads,repeat,workload,version,seconds,metric_name_or_value,extra,resource_cpu_seconds_total,resource_cpu_percent,resource_peak_rss_kb,resource_io_read,resource_io_write" > "$OUT_DIR/results.csv"
 
   # Required assignment comparison: O0 vs O1 vs O2 vs O3.
   # Important run order: finish one workload completely before moving to the next workload.

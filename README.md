@@ -126,7 +126,7 @@ Examples:
 Inside each run folder you will find:
 
 - `results.csv` - combined benchmark output
-- `averages.csv` - grouped averages across all repeats for each configuration
+- `averages.csv` - grouped averages across all repeats for each configuration, including the resource columns
 - `run.log` - timestamped runner log
 - `system_summary.txt` - environment summary
 - `lscpu.txt`, `free_h.txt`, `df_h.txt`, `vmstat_1s_5samples.txt`, `top_snapshot.txt` - Linux system snapshots
@@ -148,7 +148,7 @@ results/<environment>_<timestamp>/results.csv
 It is a single CSV with these columns:
 
 ```text
-environment,opt_level,threads,repeat,workload,version,seconds,metric_name_or_value,extra
+environment,opt_level,threads,repeat,workload,version,seconds,metric_name_or_value,extra,resource_cpu_seconds_total,resource_cpu_percent,resource_peak_rss_kb,resource_io_read,resource_io_write
 ```
 
 Use it to compare:
@@ -157,8 +157,17 @@ Use it to compare:
 - baseline vs optimized source versions
 - single-thread vs multi-thread OpenMP runs
 - the same environment across different machines or providers
+- per-repeat CPU, memory, and I/O resource usage
 
 For report tables and charts, keep runs from different environments in separate timestamped folders so you do not mix outputs.
+
+Notes on the resource columns:
+
+- `resource_cpu_seconds_total` is total process CPU time
+- `resource_cpu_percent` is CPU usage during the run
+- `resource_peak_rss_kb` is peak resident memory usage
+- `resource_io_read` and `resource_io_write` are process/system I/O counters captured by the runner
+- Linux uses `time -v` process counters, while Windows uses PowerShell process counters, so compare the same platform when interpreting these fields
 
 ## Tuning the run
 
