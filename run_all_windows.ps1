@@ -128,10 +128,6 @@ function Run-One($Label, $Exe, $Arg, $Opt, $Threads, $Repeat) {
     "io_read=$ioRead" | Add-Content -Encoding ascii $TimeFile
     "io_write=$ioWrite" | Add-Content -Encoding ascii $TimeFile
 
-    if ((Test-Path $Err) -and ((Get-Item $Err).Length -eq 0)) {
-        Remove-Item -Force $Err
-    }
-
     $lines = Get-Content $Raw
     foreach ($line in $lines | Select-Object -Skip 1) {
         if ($line.Trim().Length -gt 0) {
@@ -229,6 +225,10 @@ function Generate-Averages {
         }
 }
 
+function Cleanup-EmptyErrorFiles {
+    Get-ChildItem -Path $OutDir -Filter "err_*.txt" -File | Where-Object { $_.Length -eq 0 } | Remove-Item -Force
+}
+
 function Run-All {
     # Required assignment comparison: O0 vs O1 vs O2 vs O3.
     # Important run order: finish one workload completely before moving to the next workload.
@@ -285,6 +285,7 @@ Build-One "-O2" "O2"
 Build-One "-O3" "O3"
 Run-All
 Generate-Averages
+Cleanup-EmptyErrorFiles
 
 Log "Finished. Results saved in: $OutDir"
 Write-Host "Results folder: $OutDir"
